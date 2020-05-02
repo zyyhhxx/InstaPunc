@@ -21,7 +21,7 @@ def tokenize(sentences):
 
     for i in tqdm(range(len(sentences))):
         # Skip empty sentences
-        if len(sentences[i]) <= 0:
+        if len(sentences[i]) <= 1:
             continue
         
         tokens = tokenizer(sentences[i])
