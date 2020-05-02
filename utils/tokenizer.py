@@ -3,6 +3,13 @@ from spacy.lang.en import English
 import warnings
 import string 
 
+def preprocess_data(dataset, window_size, classes):
+    token_data = tokenize(dataset)
+    padded_data = pad(token_data, window_size)
+    data, labels = create_labels(padded_data, classes, window_size)
+
+    return data, labels
+
 def tokenize(sentences):
     print("Tokenizing:")
 
