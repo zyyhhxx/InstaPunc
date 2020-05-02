@@ -21,3 +21,15 @@ def tokenize(sentences):
         results.append([token.text.lower() for token in tokens])      
         
     return results
+
+def pad(sentences, window_size):
+    print("Padding:")
+
+    pad_size = window_size // 2
+    results = []
+
+    for i in tqdm(range(len(sentences))):
+        results.append(["<pad>"] * pad_size + sentences[i] + ["<pad>"] * pad_size)
+    
+    return results
+
