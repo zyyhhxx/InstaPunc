@@ -74,8 +74,18 @@ def create_labels(sentences, classes, window_size):
             word = sentence[j]
 
             if len(word) == 1 and word in string.punctuation:
+                # Handling special cases of more than one consecutive punctuations
+                if pre_punctuation:
+                    # For handling etc.
+                    if word == "," and sentence[j-1] == '.' :
+                        sentence_labels[-1] = ","
+
+                    # Ignoring all consecutive punctuations except the very first one
+                    else:
+                        continue
+
                 # If the word is a class punctuation, insert it regardless
-                if word in classes:
+                elif word in classes and not pre_pad:
                     sentence_labels.append(word)
                     pre_punctuation = True
             else:
@@ -96,6 +106,8 @@ def create_labels(sentences, classes, window_size):
 
         if len(sentence_labels) != len(clean_sentence) - window_size + 1:
             warnings.warn("Lengths of labels and non-punctuation words mismatch:" + str(i))
+            # Test the troubled sentence automatically
+            create_labels_test(sentence, classes, window_size)
 
         # Third, construct data
         for j in range(len(clean_sentence) - window_size + 1):
@@ -104,7 +116,9 @@ def create_labels(sentences, classes, window_size):
 
     return data, labels
 
-def create_labels_single(sentence, classes, window_size):
+def create_labels_test(sentence, classes, window_size):
+    print("Testing: " + " ".join(sentence))
+
     data = []
     labels = []
     
@@ -119,8 +133,18 @@ def create_labels_single(sentence, classes, window_size):
         word = sentence[j]
 
         if len(word) == 1 and word in string.punctuation:
+            # Handling special cases of more than one consecutive punctuations
+            if pre_punctuation:
+                # For handling etc.
+                if word == "," and sentence[j-1] == '.' :
+                    sentence_labels[-1] = ","
+
+                # Ignoring all consecutive punctuations except the very first one
+                else:
+                    continue
+
             # If the word is a class punctuation, insert it regardless
-            if word in classes:
+            elif word in classes and not pre_pad:
                 sentence_labels.append(word)
                 pre_punctuation = True
         else:
