@@ -1,14 +1,17 @@
 from tqdm.auto import tqdm
 from spacy.lang.en import English
 import warnings
-import string 
+import string
+import torch
 
-def preprocess_data(dataset, window_size, classes):
+def preprocess_data(dataset, window_size, classes, vectors):
     token_data = tokenize(dataset)
     padded_data = pad(token_data, window_size)
     data, labels = create_labels(padded_data, classes, window_size)
+    x = get_word_vector(data, vectors)
+    y = convert_labels(labels)
 
-    return data, labels
+    return x, y
 
 def tokenize(sentences):
     print("Tokenizing:")
@@ -39,7 +42,6 @@ def pad(sentences, window_size):
         results.append(["<pad>"] * pad_size + sentences[i] + ["<pad>"] * pad_size)
     
     return results
-
 
 def create_labels(sentences, classes, window_size):
     """ 
@@ -173,3 +175,36 @@ def create_labels_test(sentence, classes, window_size):
     # Finally, inspect the results
     for i in range(len(data)):
         print(data[i], labels[i])
+
+def get_word_vector(data, word_vector):
+    print("Get word vector weights")
+
+    word_vector_weights= []
+    
+    for i in tqdm(range(len(data))):
+        temp_weights = []
+        
+        for word in data[i]:
+            temp_weights.append(word_vector[word])
+        
+        word_vector_weights.append(torch.stack(temp_weights))
+
+    return torch.stack(word_vector_weights)
+
+def convert_labels(labels):
+    print("Converting labels to tensor")
+    
+    results = []
+    classes = {}
+    class_num = 0
+
+    for i in tqdm(range(len(labels))):
+        label = labels[i]
+        if label in classes:
+            results.append(classes[label])
+        else:
+            classes[label] = class_num
+            class_num += 1
+            results.append(classes[label])
+
+    return torch.LongTensor(results)
