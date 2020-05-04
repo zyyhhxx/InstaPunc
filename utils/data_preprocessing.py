@@ -1,14 +1,15 @@
 from tqdm.auto import tqdm
 from spacy.lang.en import English
+from datetime import datetime
 import warnings
 import string
 import torch
-from .constants import CLASSES
+from .constants import CLASSES, WINDOW_SIZE
 
-def preprocess_data(dataset, window_size, classes, vectors):
+def preprocess_data(dataset, vectors):
     token_data = tokenize(dataset)
-    padded_data = pad(token_data, window_size)
-    data, labels = create_labels(padded_data, classes, window_size)
+    padded_data = pad(token_data, WINDOW_SIZE)
+    data, labels = create_labels(padded_data, CLASSES, WINDOW_SIZE)
 
     x = get_word_vector(data, vectors)
     y = convert_labels(labels)
@@ -19,37 +20,58 @@ def preprocess_data(dataset, window_size, classes, vectors):
 
     return x, y
 
-def tokenize(sentences):
-    print("Tokenizing:")
+def preprocess_data_inference(dataset, vectors):
+    token_data = tokenize([dataset], False)
+    padded_data = pad(token_data, WINDOW_SIZE, False)
+    data = get_n_gram(padded_data[0], WINDOW_SIZE)
+    x = get_word_vector(data, vectors, False)
+    
+    return x, token_data[0]
 
+def tokenize(sentences, progress=True):
     nlp = English()
     # Create a Tokenizer with the default settings for English
     # including punctuation rules and exceptions
     tokenizer = nlp.Defaults.create_tokenizer(nlp)
     results = []
 
-    for i in tqdm(range(len(sentences))):
-        # Skip empty sentences
-        if len(sentences[i]) <= 1:
-            continue
-        
-        tokens = tokenizer(sentences[i])
-        results.append([token.text for token in tokens])      
+    if progress:
+        print("Tokenizing:")
+        for i in tqdm(range(len(sentences))):
+            # Skip empty sentences
+            if len(sentences[i]) <= 1:
+                continue
+            
+            tokens = tokenizer(sentences[i])
+            results.append([token.text for token in tokens])      
+
+    else:
+        for i in range(len(sentences)):
+            # Skip empty sentences
+            if len(sentences[i]) <= 1:
+                continue
+            
+            tokens = tokenizer(sentences[i])
+            results.append([token.text for token in tokens])
         
     return results
 
-def pad(sentences, window_size):
-    print("Padding:")
-
+def pad(sentences, window_size, progress=True):
     pad_size = window_size // 2
     results = []
 
-    for i in tqdm(range(len(sentences))):
-        results.append(["<pad>"] * pad_size + sentences[i] + ["<pad>"] * pad_size)
+    if progress:
+        print("Padding:")
+        for i in tqdm(range(len(sentences))):
+            results.append(["<pad>"] * pad_size + sentences[i] + ["<pad>"] * pad_size)
+
+    else:
+        for i in range(len(sentences)):
+            results.append(["<pad>"] * pad_size + sentences[i] + ["<pad>"] * pad_size)
     
     return results
 
-def create_labels(sentences, classes, window_size):
+def create_labels(sentences, classes, window_size, progress=True):
     """ 
     Create labels based on classes
   
@@ -64,68 +86,104 @@ def create_labels(sentences, classes, window_size):
   
     """
 
-    print("Creating labels:")
-
     pad_size = window_size // 2
     data = []
     labels = []
 
-    for i in tqdm(range(len(sentences))):
-        sentence = sentences[i]
+    if progress:
+        print("Creating labels:")
+        for i in tqdm(range(len(sentences))):
+            sentence = sentences[i]
 
-        # First, get punctuation labels
-        sentence_labels = []
-        pre_punctuation = False
-        pre_pad = True
+            # First, get punctuation labels
+            punc_labels = get_punc_labels(sentence, pad_size, classes)
 
-        for j in range(pad_size, len(sentence) - pad_size + 1):
-            word = sentence[j]
+            # Second, get tokens without punctuations
+            clean_sentence = get_clean_sentence(sentence, punc_labels, window_size)
 
-            if len(word) == 1 and word in string.punctuation:
-                # Handling special cases of more than one consecutive punctuations
-                if pre_punctuation:
-                    # For handling etc.
-                    if word == "," and sentence[j-1] == '.' :
-                        sentence_labels[-1] = ","
+            # Third, construct data
+            data += get_n_gram(clean_sentence, window_size)
+            get_labels(labels, clean_sentence, window_size, punc_labels)
 
-                    # Ignoring all consecutive punctuations except the very first one
-                    else:
-                        continue
+    else:
+        for i in range(len(sentences)):
+            sentence = sentences[i]
 
-                # If the word is a class punctuation, insert it regardless
-                elif word in classes and not pre_pad:
-                    sentence_labels.append(word)
-                    pre_punctuation = True
-            else:
-                # Only add "no punctuation" when the previous word is not punctuation or ignored (including padding) and 
-                if not pre_punctuation and not pre_pad:
-                    # o means no punctuation
-                    sentence_labels.append("o")
-                pre_punctuation = False
-                pre_pad = False
+            # First, get punctuation labels
+            punc_labels = get_punc_labels(sentence, pad_size, classes)
 
-        # Second, get tokens without punctuations
-        clean_sentence = []
-        for word in sentence:
-            if len(word) == 1 and word in string.punctuation:
-                continue
-            else:
-                clean_sentence.append(word)
+            # Second, get tokens without punctuations
+            clean_sentence = get_clean_sentence(sentence, punc_labels, window_size)
 
-        if len(sentence_labels) != len(clean_sentence) - window_size + 1:
-            warnings.warn("Lengths of labels and non-punctuation words mismatch:" + str(i))
-            # Test the troubled sentence automatically
-            create_labels_test(sentence, classes, window_size)
-
-        # Third, construct data
-        for j in range(len(clean_sentence) - window_size + 1):
-            n_gram_data = clean_sentence[j:j + window_size]
-            data.append(n_gram_data)
-            punctuation_label = sentence_labels[j]
-            capitalization_label = n_gram_data[len(n_gram_data)//2][0].isupper()
-            labels.append((punctuation_label, capitalization_label))
+            # Third, construct data
+            data += get_n_gram(clean_sentence, window_size)
+            get_labels(labels, clean_sentence, window_size, punc_labels)
 
     return data, labels
+
+def get_punc_labels(sentence, pad_size, classes):
+    sentence_labels = []
+    pre_punctuation = False
+    pre_pad = True
+
+    for j in range(pad_size, len(sentence) - pad_size + 1):
+        word = sentence[j]
+
+        if len(word) == 1 and word in string.punctuation:
+            # Handling special cases of more than one consecutive punctuations
+            if pre_punctuation:
+                # For handling etc.
+                if word == "," and sentence[j-1] == '.' :
+                    sentence_labels[-1] = ","
+
+                # Ignoring all consecutive punctuations except the very first one
+                else:
+                    continue
+
+            # If the word is a class punctuation, insert it regardless
+            elif word in classes and not pre_pad:
+                sentence_labels.append(word)
+                pre_punctuation = True
+        else:
+            # Only add "no punctuation" when the previous word is not punctuation or ignored (including padding) and 
+            if not pre_punctuation and not pre_pad:
+                # o means no punctuation
+                sentence_labels.append("o")
+            pre_punctuation = False
+            pre_pad = False
+
+    return sentence_labels
+
+def get_clean_sentence(sentence, punc_labels, window_size):
+    clean_sentence = []
+
+    for word in sentence:
+        if len(word) == 1 and word in string.punctuation:
+            continue
+        else:
+            clean_sentence.append(word)
+
+    if len(punc_labels) != len(clean_sentence) - window_size + 1:
+        warnings.warn("Lengths of labels and non-punctuation words mismatch:" + str(i))
+        # Test the troubled sentence automatically
+        # create_labels_test(sentence, classes, window_size)
+
+    return clean_sentence
+
+def get_n_gram(clean_sentence, window_size):
+    results = []
+
+    for j in range(len(clean_sentence) - window_size + 1):
+        results.append(clean_sentence[j:j + window_size])
+
+    return results
+
+def get_labels(labels, clean_sentence, window_size, punc_labels):
+    for j in range(len(clean_sentence) - window_size + 1):
+        n_gram_data = clean_sentence[j:j + window_size]
+        punctuation_label = punc_labels[j]
+        capitalization_label = n_gram_data[len(n_gram_data)//2][0].isupper()
+        labels.append((punctuation_label, capitalization_label))
 
 def create_labels_test(sentence, classes, window_size):
     print("Testing: " + " ".join(sentence))
@@ -185,39 +243,61 @@ def create_labels_test(sentence, classes, window_size):
     for i in range(len(data)):
         print(data[i], labels[i])
 
-def get_word_vector(data, word_vector):
-    print("Get word vector weights")
-
+def get_word_vector(data, word_vector, progress=True):
     word_vector_weights= []
     
-    for i in tqdm(range(len(data))):
-        temp_weights = []
-        
-        for word in data[i]:
-            temp_weights.append(word_vector[word.lower()])
-        
-        word_vector_weights.append(torch.stack(temp_weights))
+    if progress:
+        print("Get word vector weights")
+        for i in tqdm(range(len(data))):
+            temp_weights = []
+            
+            for word in data[i]:
+                temp_weights.append(word_vector[word.lower()])
+            
+            word_vector_weights.append(torch.stack(temp_weights))
+
+    else:
+        for i in range(len(data)):
+            temp_weights = []
+            
+            for word in data[i]:
+                temp_weights.append(word_vector[word.lower()])
+            
+            word_vector_weights.append(torch.stack(temp_weights))
 
     return torch.stack(word_vector_weights)
 
-def convert_labels(labels):
-    print("Converting labels to tensor")
-    
+def convert_labels(labels, progress=True):
     punctuation_encodings = []
     capitalization_encodings = []
     classes = {}
     class_num = 0
 
-    for i in tqdm(range(len(labels))):
-        punctuation_label, capitalization_label = labels[i]
+    if progress:
+        print("Converting labels to tensor")
+        for i in tqdm(range(len(labels))):
+            punctuation_label, capitalization_label = labels[i]
 
-        capitalization_encodings.append(int(capitalization_label))
+            capitalization_encodings.append(int(capitalization_label))
 
-        if punctuation_label in classes:
-            punctuation_encodings.append(classes[punctuation_label])
-        else:
-            classes[punctuation_label] = CLASSES.index(punctuation_label)
-            class_num += 1
-            punctuation_encodings.append(classes[punctuation_label])
+            if punctuation_label in classes:
+                punctuation_encodings.append(classes[punctuation_label])
+            else:
+                classes[punctuation_label] = CLASSES.index(punctuation_label)
+                class_num += 1
+                punctuation_encodings.append(classes[punctuation_label])
+
+    else:
+        for i in range(len(labels)):
+            punctuation_label, capitalization_label = labels[i]
+
+            capitalization_encodings.append(int(capitalization_label))
+
+            if punctuation_label in classes:
+                punctuation_encodings.append(classes[punctuation_label])
+            else:
+                classes[punctuation_label] = CLASSES.index(punctuation_label)
+                class_num += 1
+                punctuation_encodings.append(classes[punctuation_label])
 
     return torch.LongTensor(punctuation_encodings), torch.LongTensor(capitalization_encodings)

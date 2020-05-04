@@ -1,6 +1,7 @@
 import pandas as pd
 from tqdm.auto import tqdm
 from .constants import CLASSES
+from .data_preprocessing import preprocess_data_inference
 import torch
 
 def train(train_loader, dev_loader, model, criterions, optimizer, epochs, device):
@@ -112,3 +113,30 @@ def test(dataloader, model, device):
     dfs, acc = eval(dataloader, model, device)
     print('Test accuracy: punctuation: {}%, capitalization: {}%'.format(round(100 * acc[0], 4), round(100 * acc[1], 4)))
     return dfs
+
+def infer_sentence(sentence, model, vectors):
+    model.eval()
+    infer_x, token_data = preprocess_data_inference(sentence, vectors)
+    
+    predictions = model(infer_x)
+
+    _, punc_predicted = torch.max(predictions[0].data, 1)
+    _, cap_predicted = torch.max(predictions[1].data, 1)
+
+    results = []
+    for i in range(len(token_data)):
+        if cap_predicted[i] == 1:
+            results.append(token_data[i].capitalize())
+        else:
+            results.append(token_data[i])
+        if punc_predicted[i] > 0:
+            results.append(CLASSES[punc_predicted[i]])
+    return " ".join(results)
+
+def save_model(model, name = ""):
+    now = datetime.now()
+    PATH = './checkpoints/' + name + now.strftime("%m-%d-%Y-%H-%M-%S") + '.pth'
+    torch.save(model.state_dict(), PATH)
+
+def load_model(model, path):
+    model.load_state_dict(torch.load(path))
