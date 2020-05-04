@@ -1,6 +1,5 @@
 from tqdm.auto import tqdm
 from spacy.lang.en import English
-from datetime import datetime
 import warnings
 import string
 import torch
