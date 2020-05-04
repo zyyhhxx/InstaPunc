@@ -157,7 +157,7 @@ def get_punc_labels(sentence, pad_size, classes):
 
     return sentence_labels
 
-def get_clean_sentence(sentence, punc_labels, window_size):
+def get_clean_sentence(sentence, window_size):
     clean_sentence = []
 
     for word in sentence:
@@ -165,11 +165,6 @@ def get_clean_sentence(sentence, punc_labels, window_size):
             continue
         else:
             clean_sentence.append(word)
-
-    if len(punc_labels) != len(clean_sentence) - window_size + 1:
-        warnings.warn("Lengths of labels and non-punctuation words mismatch:" + str(i))
-        # Test the troubled sentence automatically
-        # create_labels_test(sentence, classes, window_size)
 
     return clean_sentence
 
