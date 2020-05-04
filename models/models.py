@@ -1,11 +1,12 @@
 import torch.nn as nn
 
+# The baseline model
 class PuncLinear(nn.Module):
-    def __init__(self, classes):
+    def __init__(self, classes, window_size):
         super(PuncLinear, self).__init__()
         
         self.linear = nn.Sequential(
-            nn.Linear(300 * 5, 256),
+            nn.Linear(300 * window_size, 256),
             nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(256, len(classes)),

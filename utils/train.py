@@ -1,6 +1,9 @@
 import pandas as pd
+from tqdm.auto import tqdm
+from .constants import CLASSES
+import torch
 
-def train(train_loader, dev_loader, model, criterion, optimizer, epochs):
+def train(train_loader, dev_loader, model, criterion, optimizer, epochs, device):
 
     for epoch in range(epochs):  # loop over the dataset multiple times
         print("----------------------------")
@@ -26,10 +29,10 @@ def train(train_loader, dev_loader, model, criterion, optimizer, epochs):
             epoch_loss += outputs.shape[0] * loss.item()
             
         print("Training loss:", epoch_loss / len(train_loader))
-        _, acc = validate(dev_loader, model)
+        _, acc = validate(dev_loader, model, device)
         print('Validation accuracy: %d %%' % (100 * acc))
                 
-def validate(dataloader, model):
+def validate(dataloader, model, device):
     correct = 0
     total = 0
     predicted_total = [1] * len(CLASSES)
