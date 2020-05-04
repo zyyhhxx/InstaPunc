@@ -9,8 +9,13 @@ def preprocess_data(dataset, window_size, classes, vectors):
     token_data = tokenize(dataset)
     padded_data = pad(token_data, window_size)
     data, labels = create_labels(padded_data, classes, window_size)
+
     x = get_word_vector(data, vectors)
     y = convert_labels(labels)
+
+    print("Printing samples of the dataset")
+    for i in range(15):
+        print(data[i], labels[i])
 
     return x, y
 
@@ -29,7 +34,7 @@ def tokenize(sentences):
             continue
         
         tokens = tokenizer(sentences[i])
-        results.append([token.text.lower() for token in tokens])      
+        results.append([token.text for token in tokens])      
         
     return results
 
@@ -68,7 +73,7 @@ def create_labels(sentences, classes, window_size):
     for i in tqdm(range(len(sentences))):
         sentence = sentences[i]
 
-        # First, get labels
+        # First, get punctuation labels
         sentence_labels = []
         pre_punctuation = False
         pre_pad = True
@@ -114,8 +119,11 @@ def create_labels(sentences, classes, window_size):
 
         # Third, construct data
         for j in range(len(clean_sentence) - window_size + 1):
-            data.append(clean_sentence[j:j + window_size])
-            labels.append(sentence_labels[j])
+            n_gram_data = clean_sentence[j:j + window_size]
+            data.append(n_gram_data)
+            punctuation_label = sentence_labels[j]
+            capitalization_label = n_gram_data[len(n_gram_data)//2][0].isupper()
+            labels.append((punctuation_label, capitalization_label))
 
     return data, labels
 
@@ -186,7 +194,7 @@ def get_word_vector(data, word_vector):
         temp_weights = []
         
         for word in data[i]:
-            temp_weights.append(word_vector[word])
+            temp_weights.append(word_vector[word.lower()])
         
         word_vector_weights.append(torch.stack(temp_weights))
 
@@ -195,17 +203,21 @@ def get_word_vector(data, word_vector):
 def convert_labels(labels):
     print("Converting labels to tensor")
     
-    results = []
+    punctuation_encodings = []
+    capitalization_encodings = []
     classes = {}
     class_num = 0
 
     for i in tqdm(range(len(labels))):
-        label = labels[i]
-        if label in classes:
-            results.append(classes[label])
-        else:
-            classes[label] = CLASSES.index(label)
-            class_num += 1
-            results.append(classes[label])
+        punctuation_label, capitalization_label = labels[i]
 
-    return torch.LongTensor(results)
+        capitalization_encodings.append(int(capitalization_label))
+
+        if punctuation_label in classes:
+            punctuation_encodings.append(classes[punctuation_label])
+        else:
+            classes[punctuation_label] = CLASSES.index(punctuation_label)
+            class_num += 1
+            punctuation_encodings.append(classes[punctuation_label])
+
+    return torch.LongTensor(punctuation_encodings), torch.LongTensor(capitalization_encodings)

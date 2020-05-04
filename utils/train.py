@@ -3,68 +3,112 @@ from tqdm.auto import tqdm
 from .constants import CLASSES
 import torch
 
-def train(train_loader, dev_loader, model, criterion, optimizer, epochs, device):
+def train(train_loader, dev_loader, model, criterions, optimizer, epochs, device):
 
     for epoch in range(epochs):  # loop over the dataset multiple times
         print("----------------------------")
         print("Epoch:", epoch)
-        
+
         model.train()
         t = tqdm(iter(train_loader), leave=False, total=len(train_loader))
-        epoch_loss = 0.0
-        
+        epoch_punctuation_loss = 0.0
+        epoch_capitalization_loss = 0.0
+
         for _, data in enumerate(t, 0):
-            # get the inputs; data is a list of [inputs, labels]
-            inputs, labels = data[0].to(device), data[1].to(device)
+            inputs, punctuation_labels, capitalization_labels = \
+                data[0].to(device), data[1][0].to(device), data[1][1].to(device)
 
-            # zero the parameter gradients
             optimizer.zero_grad()
+            predictions = model(inputs)
+            punctuation_loss = criterions[0](predictions[0], punctuation_labels)
+            capitalization_loss = criterions[1](predictions[1], capitalization_labels)
 
-            # forward + backward + optimize
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
+            loss = punctuation_loss + capitalization_loss
+
             loss.backward()
             optimizer.step()
-            
-            epoch_loss += outputs.shape[0] * loss.item()
-            
-        print("Training loss:", epoch_loss / len(train_loader))
-        _, acc = validate(dev_loader, model, device)
-        print('Validation accuracy: %d %%' % (100 * acc))
+
+            epoch_punctuation_loss += predictions[0].shape[0] * punctuation_loss.item()
+            epoch_capitalization_loss += predictions[1].shape[0] * capitalization_loss.item()
+
+        print("Training loss for punctuation:", epoch_punctuation_loss / len(train_loader))
+        print("Training loss for capitalization:", epoch_capitalization_loss / len(train_loader))
+        validate(dev_loader, model, device)
                 
-def validate(dataloader, model, device):
-    correct = 0
+def eval(dataloader, model, device):
+    punc_correct = 0
+    cap_correct = 0
     total = 0
-    predicted_total = [1] * len(CLASSES)
-    predicted_correct = [0] * len(CLASSES)
-    predicted_expected = [1] * len(CLASSES)
+    punc_predicted_total = [1] * len(CLASSES)
+    punc_predicted_correct = [0] * len(CLASSES)
+    punc_predicted_expected = [1] * len(CLASSES)
+    cap_predicted_total = [1] * 2
+    cap_predicted_correct = [0] * 2
+    cap_predicted_expected = [1] * 2
     
     model.eval()
     with torch.no_grad():
         for data in dataloader:
-            inputs, labels = data[0].to(device), data[1].to(device)
-            outputs = model(inputs)
-            _, predicted = torch.max(outputs.data, 1)
-            
+            inputs, punctuation_labels, capitalization_labels = \
+                data[0].to(device), data[1][0].to(device), data[1][1].to(device)
+
+            predictions = model(inputs)
+            _, punc_predicted = torch.max(predictions[0].data, 1)
+            _, cap_predicted = torch.max(predictions[1].data, 1)
+
             # Gathering information for f score
-            for i in range(predicted.shape[0]):
-                predicted_class = predicted[i]
-                correct_class = labels[i]
-                predicted_total[predicted_class] += 1
-                predicted_expected[correct_class] += 1
+            for i in range(punc_predicted.shape[0]):
+                # For punctuation
+                predicted_class = punc_predicted[i]
+                correct_class = punctuation_labels[i]
+                punc_predicted_total[predicted_class] += 1
+                punc_predicted_expected[correct_class] += 1
                 if predicted_class == correct_class:
-                    predicted_correct[predicted_class] += 1
+                    punc_predicted_correct[predicted_class] += 1
+
+                # For capitalization
+                predicted_class = cap_predicted[i]
+                correct_class = capitalization_labels[i]
+                cap_predicted_total[predicted_class] += 1
+                cap_predicted_expected[correct_class] += 1
+                if predicted_class == correct_class:
+                    cap_predicted_correct[predicted_class] += 1
             
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+            total += punc_predicted.shape[0]
+            punc_correct += (punc_predicted == punctuation_labels).sum().item()
+            cap_correct += (cap_predicted == capitalization_labels).sum().item()
     
+    # Stats for punctuation
     f_scores = []
     for i in range(len(CLASSES)):
-        precision = predicted_correct[i] / predicted_total[i]
-        recall = predicted_correct[i] / predicted_expected[i]
+        precision = punc_predicted_correct[i] / punc_predicted_total[i]
+        recall = punc_predicted_correct[i] / punc_predicted_expected[i]
         f_score = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0
-        f_scores.append([CLASSES[i], predicted_total[i], predicted_correct[i], predicted_expected[i], precision, recall, f_score])
+        f_scores.append([CLASSES[i], punc_predicted_total[i]-1, punc_predicted_correct[i], punc_predicted_expected[i]-1, precision, recall, f_score])
         
-    df = pd.DataFrame(f_scores, columns=["punctuation", "predicted", "predicted correctly", "predicted expectation", "precision", "recall", "f_score"])
-    df = df.set_index("punctuation")
-    return df, correct / total
+    df_punc = pd.DataFrame(f_scores, columns=["punctuation", "predicted", "predicted correctly", "predicted expectation", "precision", "recall", "f_score"])
+    df_punc = df_punc.set_index("punctuation")
+
+    # Stats for capitalization
+    f_scores = []
+    for i in range(2):
+        precision = cap_predicted_correct[i] / cap_predicted_total[i]
+        recall = cap_predicted_correct[i] / cap_predicted_expected[i]
+        f_score = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0
+        f_scores.append([i, cap_predicted_total[i]-1, cap_predicted_correct[i], cap_predicted_expected[i]-1, precision, recall, f_score])
+    f_scores[0][0] = "No"
+    f_scores[1][0] = "Yes"
+        
+    df_cap = pd.DataFrame(f_scores, columns=["capitalization", "predicted", "predicted correctly", "predicted expectation", "precision", "recall", "f_score"])
+    df_cap = df_cap.set_index("capitalization")
+
+    return (df_punc, df_cap), (punc_correct / total, cap_correct / total)
+
+def validate(dataloader, model, device):
+    _, acc = eval(dataloader, model, device)
+    print('Validation accuracy: punctuation: {}%, capitalization: {}%'.format(round(100 * acc[0], 4), round(100 * acc[1], 4)))
+
+def test(dataloader, model, device):
+    dfs, acc = eval(dataloader, model, device)
+    print('Test accuracy: punctuation: {}%, capitalization: {}%'.format(round(100 * acc[0], 4), round(100 * acc[1], 4)))
+    return dfs
