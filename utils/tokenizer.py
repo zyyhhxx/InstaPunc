@@ -3,6 +3,7 @@ from spacy.lang.en import English
 import warnings
 import string
 import torch
+from .constants import CLASSES
 
 def preprocess_data(dataset, window_size, classes, vectors):
     token_data = tokenize(dataset)
@@ -203,7 +204,7 @@ def convert_labels(labels):
         if label in classes:
             results.append(classes[label])
         else:
-            classes[label] = class_num
+            classes[label] = CLASSES.index(label)
             class_num += 1
             results.append(classes[label])
 
