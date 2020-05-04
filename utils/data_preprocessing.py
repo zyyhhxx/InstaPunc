@@ -8,15 +8,15 @@ from .constants import CLASSES, WINDOW_SIZE
 def preprocess_data(dataset, vectors):
     token_data = tokenize(dataset)
     padded_data = pad(token_data, WINDOW_SIZE)
-    x_range, labels = create_labels(padded_data, CLASSES, WINDOW_SIZE)
+    x_range, clean_data, labels = create_labels(padded_data, CLASSES, WINDOW_SIZE)
 
-    x_data = get_word_vector(padded_data, vectors)
+    x_data = get_word_vector(clean_data, vectors)
     y = convert_labels(labels)
 
     print("Printing samples of the dataset")
     for i in range(15):
         data_index, data_left, data_right = x_range[i]
-        print(padded_data[data_index][data_left:data_right], labels[i])
+        print(clean_data[data_index][data_left:data_right], labels[i])
 
     return (x_range, x_data), y
 
@@ -87,7 +87,8 @@ def create_labels(sentences, classes, window_size, progress=True):
     """
 
     pad_size = window_size // 2
-    data = []
+    data_range = []
+    clean_data = []
     labels = []
 
     if progress:
@@ -102,7 +103,8 @@ def create_labels(sentences, classes, window_size, progress=True):
             clean_sentence = get_clean_sentence(sentence, punc_labels, window_size)
 
             # Third, construct data
-            data += get_n_gram_range(clean_sentence, window_size, i)
+            clean_data.append(clean_sentence)
+            data_range += get_n_gram_range(clean_sentence, window_size, i)
             get_labels(labels, clean_sentence, window_size, punc_labels)
 
     else:
@@ -116,10 +118,11 @@ def create_labels(sentences, classes, window_size, progress=True):
             clean_sentence = get_clean_sentence(sentence, punc_labels, window_size)
 
             # Third, construct data
+            clean_data.append(clean_sentence)
             data += get_n_gram_range(clean_sentence, window_size, i)
             get_labels(labels, clean_sentence, window_size, punc_labels)
 
-    return data, labels
+    return data_range, clean_data, labels
 
 def get_punc_labels(sentence, pad_size, classes):
     sentence_labels = []
