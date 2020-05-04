@@ -8,16 +8,17 @@ from .constants import CLASSES, WINDOW_SIZE
 def preprocess_data(dataset, vectors):
     token_data = tokenize(dataset)
     padded_data = pad(token_data, WINDOW_SIZE)
-    data, labels = create_labels(padded_data, CLASSES, WINDOW_SIZE)
+    x_range, labels = create_labels(padded_data, CLASSES, WINDOW_SIZE)
 
-    x = get_word_vector(data, vectors)
+    x_data = get_word_vector(padded_data, vectors)
     y = convert_labels(labels)
 
     print("Printing samples of the dataset")
     for i in range(15):
-        print(data[i], labels[i])
+        data_index, data_left, data_right = x_range[i]
+        print(padded_data[data_index][data_left:data_right], labels[i])
 
-    return x, y
+    return (x_range, x_data), y
 
 def preprocess_data_inference(dataset, vectors):
     token_data = tokenize([dataset], False)
@@ -101,7 +102,7 @@ def create_labels(sentences, classes, window_size, progress=True):
             clean_sentence = get_clean_sentence(sentence, punc_labels, window_size)
 
             # Third, construct data
-            data += get_n_gram(clean_sentence, window_size)
+            data += get_n_gram_range(clean_sentence, window_size, i)
             get_labels(labels, clean_sentence, window_size, punc_labels)
 
     else:
@@ -115,7 +116,7 @@ def create_labels(sentences, classes, window_size, progress=True):
             clean_sentence = get_clean_sentence(sentence, punc_labels, window_size)
 
             # Third, construct data
-            data += get_n_gram(clean_sentence, window_size)
+            data += get_n_gram_range(clean_sentence, window_size, i)
             get_labels(labels, clean_sentence, window_size, punc_labels)
 
     return data, labels
@@ -169,11 +170,11 @@ def get_clean_sentence(sentence, punc_labels, window_size):
 
     return clean_sentence
 
-def get_n_gram(clean_sentence, window_size):
+def get_n_gram_range(clean_sentence, window_size, sentence_index):
     results = []
 
     for j in range(len(clean_sentence) - window_size + 1):
-        results.append(clean_sentence[j:j + window_size])
+        results.append((sentence_index, j, j + window_size))
 
     return results
 
@@ -264,7 +265,7 @@ def get_word_vector(data, word_vector, progress=True):
             
             word_vector_weights.append(torch.stack(temp_weights))
 
-    return torch.stack(word_vector_weights)
+    return word_vector_weights
 
 def convert_labels(labels, progress=True):
     punctuation_encodings = []
