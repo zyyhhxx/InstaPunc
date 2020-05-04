@@ -23,10 +23,11 @@ def preprocess_data(dataset, vectors):
 def preprocess_data_inference(dataset, vectors):
     token_data = tokenize([dataset], False)
     padded_data = pad(token_data, WINDOW_SIZE, False)
-    data = get_n_gram(padded_data[0], WINDOW_SIZE)
-    x = get_word_vector(data, vectors, False)
-    
-    return x, token_data[0]
+    x_range = get_n_gram_range(padded_data[0], WINDOW_SIZE, 0)
+    clean_sentence = get_clean_sentence(padded_data, WINDOW_SIZE)
+    x_data = get_word_vector(clean_sentence, vectors, False)
+
+    return (x_range, x_data), token_data[0]
 
 def tokenize(sentences, progress=True):
     nlp = English()
@@ -100,7 +101,7 @@ def create_labels(sentences, classes, window_size, progress=True):
             punc_labels = get_punc_labels(sentence, pad_size, classes)
 
             # Second, get tokens without punctuations
-            clean_sentence = get_clean_sentence(sentence, punc_labels, window_size)
+            clean_sentence = get_clean_sentence(sentence, window_size)
 
             # Third, construct data
             clean_data.append(clean_sentence)
@@ -115,7 +116,7 @@ def create_labels(sentences, classes, window_size, progress=True):
             punc_labels = get_punc_labels(sentence, pad_size, classes)
 
             # Second, get tokens without punctuations
-            clean_sentence = get_clean_sentence(sentence, punc_labels, window_size)
+            clean_sentence = get_clean_sentence(sentence, window_size)
 
             # Third, construct data
             clean_data.append(clean_sentence)

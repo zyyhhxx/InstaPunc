@@ -115,23 +115,28 @@ def test(dataloader, model, device):
     print('Test accuracy: punctuation: {}%, capitalization: {}%'.format(round(100 * acc[0], 4), round(100 * acc[1], 4)))
     return dfs
 
-def infer_sentence(sentence, model, vectors):
+def infer(dataloader, model, vectors):
     model.eval()
-    infer_x, token_data = preprocess_data_inference(sentence, vectors)
     
-    predictions = model(infer_x)
+    for data in dataloader:
+        predictions = model(data)
+        _, punc_predicted = torch.max(predictions[0].data, 1)
+        _, cap_predicted = torch.max(predictions[1].data, 1)
 
-    _, punc_predicted = torch.max(predictions[0].data, 1)
-    _, cap_predicted = torch.max(predictions[1].data, 1)
+    return punc_predicted, cap_predicted
 
+def reconstruct(predictions, tokens):
+    punc_predicted, cap_predicted = predictions
     results = []
-    for i in range(len(token_data)):
+    
+    for i in range(len(tokens)):
         if cap_predicted[i] == 1:
-            results.append(token_data[i].capitalize())
+            results.append(tokens[i].capitalize())
         else:
-            results.append(token_data[i])
+            results.append(tokens[i])
         if punc_predicted[i] > 0:
             results.append(CLASSES[punc_predicted[i]])
+            
     return " ".join(results)
 
 def save_model(model, name = ""):
