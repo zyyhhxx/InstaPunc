@@ -4,8 +4,13 @@ from .constants import CLASSES
 from .data_preprocessing import preprocess_data_inference
 import torch
 from datetime import datetime
+from copy import deepcopy
+import math
 
-def train(train_loader, dev_loader, model, criterions, optimizer, epochs, device):
+def train(train_loader, dev_loader, model, criterions, optimizer, epochs, device, early_stopping_threshold=5):
+    best_model = None
+    best_acc = -math.inf
+    no_improvement_epochs = 0
 
     for epoch in range(epochs):  # loop over the dataset multiple times
         print("----------------------------")
@@ -35,7 +40,25 @@ def train(train_loader, dev_loader, model, criterions, optimizer, epochs, device
 
         print("Training loss for punctuation:", epoch_punctuation_loss / len(train_loader))
         print("Training loss for capitalization:", epoch_capitalization_loss / len(train_loader))
-        validate(dev_loader, model, device)
+        
+        val_acc = validate(dev_loader, model, device)
+        # Give more weight to punctuation prediction because it's harder
+        balanced_acc = val_acc[0] * 0.7 + val_acc[1] * 0.3
+
+        # Early Stopping
+        if balanced_acc > best_acc:
+            best_model = deepcopy(model)
+            best_acc = balanced_acc
+            # Reset non-improvement counter
+            no_improvement_epochs = 0
+            print("Find a new best model!")
+        else:
+            no_improvement_epochs += 1
+
+        if no_improvement_epochs >= early_stopping_threshold:
+            return best_model
+
+    return best_model
                 
 def eval(dataloader, model, device):
     punc_correct = 0
@@ -109,6 +132,7 @@ def eval(dataloader, model, device):
 def validate(dataloader, model, device):
     _, acc = eval(dataloader, model, device)
     print('Validation accuracy: punctuation: {}%, capitalization: {}%'.format(round(100 * acc[0], 4), round(100 * acc[1], 4)))
+    return acc
 
 def test(dataloader, model, device):
     dfs, acc = eval(dataloader, model, device)
