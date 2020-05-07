@@ -29,3 +29,49 @@ class PuncLinear(nn.Module):
         prediction_cap = self.linear_cap(flatten_data)
         
         return prediction_punc, prediction_cap
+
+# The lstm model
+class PuncLstm(nn.Module):
+    def __init__(self, classes, window_size):
+        super(PuncLstm, self).__init__()
+        
+        input_size = 300
+        hidden_size = 300 // 2
+        sequence_size = 300 * window_size
+
+        self.lstm = nn.LSTM(input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=3,
+            batch_first=True,
+            bidirectional=True
+            )
+
+        self.linear_punc = nn.Sequential(
+            nn.Linear(sequence_size, sequence_size // 2),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(sequence_size // 2, sequence_size // 4),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(sequence_size // 4, len(classes)),
+            nn.ReLU()
+        )
+
+        self.linear_cap = nn.Sequential(
+            nn.Linear(sequence_size, sequence_size // 2),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(sequence_size // 2, sequence_size // 4),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(sequence_size // 4, 2),
+            nn.ReLU()
+        )
+
+    def forward(self, data):
+        out, hidden = self.lstm(data)
+        flatten_data = data.reshape(out.shape[0], 1500)
+        prediction_punc = self.linear_punc(flatten_data)
+        prediction_cap = self.linear_cap(flatten_data)
+        
+        return prediction_punc, prediction_cap
