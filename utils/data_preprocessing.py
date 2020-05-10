@@ -3,7 +3,7 @@ from spacy.lang.en import English
 import warnings
 import string
 import torch
-from .constants import CLASSES, WINDOW_SIZE
+from .constants import CLASSES, WINDOW_SIZE, BATCH_SIZE
 
 def preprocess_data(dataset, vectors):
     token_data = tokenize(dataset)
@@ -19,6 +19,27 @@ def preprocess_data(dataset, vectors):
         print(clean_data[data_index][data_left:data_right], labels[i])
 
     return (x_range, x_data), y
+
+def preprocess_data_trim(dataset, vectors):
+    token_data = tokenize(dataset)
+    padded_data = pad(token_data, WINDOW_SIZE)
+    x_range, clean_data, labels = create_labels(padded_data, CLASSES, WINDOW_SIZE)
+
+    x_data = get_word_vector(clean_data, vectors)
+    y = convert_labels(labels)
+
+    print("Printing samples of the dataset")
+    for i in range(15):
+        data_index, data_left, data_right = x_range[i]
+        print(clean_data[data_index][data_left:data_right], labels[i])
+
+    valid_len = (len(x_range) // BATCH_SIZE) * BATCH_SIZE
+
+    print("Total number of samples: ", valid_len)
+
+    x_range, x_data, label0, label1 = x_range[:valid_len], x_data[:valid_len], y[0][:valid_len], y[1][:valid_len]
+    return (x_range, x_data), (label0, label1)
+
 
 def preprocess_data_inference(dataset, vectors):
     token_data = tokenize([dataset], False)
