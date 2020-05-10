@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch.nn.functional as F
 
 # The baseline model
 class PuncLinear(nn.Module):
@@ -36,8 +37,9 @@ class PuncLstm(nn.Module):
         super(PuncLstm, self).__init__()
         
         input_size = 300
-        hidden_size = 300 // 2
+        hidden_size = 150
         self.sequence_size = 300 * window_size
+        self.hidden = None
 
         self.lstm = nn.LSTM(input_size=input_size,
             hidden_size=hidden_size,
@@ -69,7 +71,11 @@ class PuncLstm(nn.Module):
         )
 
     def forward(self, data):
-        out, hidden = self.lstm(data)
+        if self.hidden is None:
+            out, self.hidden = self.lstm(data)
+        else:
+            self.hidden = tuple([e.data for e in self.hidden])
+            out, hidden = self.lstm(data, self.hidden)
         flatten_data = data.reshape(out.shape[0], self.sequence_size)
         prediction_punc = self.linear_punc(flatten_data)
         prediction_cap = self.linear_cap(flatten_data)
