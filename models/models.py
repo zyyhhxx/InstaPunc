@@ -75,7 +75,7 @@ class PuncLstm(nn.Module):
             out, self.hidden = self.lstm(data)
         else:
             self.hidden = tuple([e.data for e in self.hidden])
-            out, hidden = self.lstm(data, self.hidden)
+            out, self.hidden = self.lstm(data, self.hidden)
         flatten_data = data.reshape(out.shape[0], self.sequence_size)
         prediction_punc = self.linear_punc(flatten_data)
         prediction_cap = self.linear_cap(flatten_data)
