@@ -1,4 +1,4 @@
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 class PuncDataset(Dataset):
     def __init__(self, data, labels):
